@@ -10,15 +10,15 @@ class MainApp:
     Основной класс приложения, который связывает все компоненты.
     """
 
-    def __init__(self, args):
+    def __init__(self, arguments):
         """
         Инициализация основных компонентов приложения.
-        :param args: Аргументы командной строки.
+        :param arguments: Аргументы командной строки.
         """
         self.model = YOLOModel('yolo11n.pt')
-        self.model.select_device(args["device"])
-        self.video_processor = VideoProcessor(args["camera"])
-        self.tracker = ObjectTracker(args["buffer"], args["overlay"], args["timeout"])
+        self.model.select_device(arguments["device"])
+        self.video_processor = VideoProcessor(arguments["camera"])
+        self.tracker = ObjectTracker(arguments["buffer"], arguments["overlay"], arguments["timeout"])
 
     def run(self):
         """
