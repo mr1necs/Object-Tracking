@@ -77,7 +77,7 @@ def main():
     pts = deque(maxlen=args["buffer"])
     model = load_model(args["device"])
 
-    with Manager() as manager:
+    with Manager():
         with Pool(processes=cpu_count()) as pool:
             while True:
                 grabbed, frame = camera.read()
