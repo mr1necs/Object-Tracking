@@ -15,7 +15,7 @@ class YOLOModel:
         :param model_path: Путь к весам модели.
         """
         # Установка уровня логирования
-        logging.getLogger("ultralytics").setLevel(logging.CRITICAL)
+        # logging.getLogger("ultralytics").setLevel(logging.CRITICAL)
 
         self.model = YOLO(model_path)
         self.device = 'cpu'
