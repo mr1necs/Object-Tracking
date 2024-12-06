@@ -1,163 +1,117 @@
-import cv2
-import numpy as np
 from collections import deque
+import numpy as np
+import cv2
+
 
 class ObjectTracker:
-    def __init__(self, buffer_size=64, roi_size=200, timeout=30):
-        """
-        Инициализация трекера объекта.
+    """
+    Класс для управления логикой трекинга объектов.
+    """
 
-        :param buffer_size: Размер буфера для хранения координат траектории.
-        :param roi_size: Размер области интереса (ROI) для локальной детекции.
-        :param timeout: Количество кадров без обнаружения до возврата к глобальной детекции.
+    def __init__(self, buffer_size, overlay, timeout):
         """
-        self.tracks = deque(maxlen=buffer_size)
-        self.roi_size = roi_size
+        Инициализация трекера.
+        :param buffer_size: Максимальный размер очереди для траектории.
+        :param overlay: Размер дополнительной области вокруг ROI.
+        :param timeout: Количество кадров до перехода к полному поиску.
+        """
+        self.pts = deque(maxlen=buffer_size)
+        self.overlay = overlay
         self.timeout = timeout
-        self.missed_frames = 0
-        self.last_position = (0, 0)  # Последняя известная позиция объекта
+        self.lost_counter = 0
+        self.tracking_roi = None
+        self.classes = {'frisbee', 'sports ball', 'apple', 'orange', 'cake', 'clock'}
 
-    def update_tracks(self, detections):
+    def process_detections(self, results, x_offset=0, y_offset=0):
         """
-        Обновляет траектории на основе новых детекций.
-
-        :param detections: Список детекций, содержащих координаты боксов.
+        Обрабатывает результаты детекции, возвращая список объектов.
+        :param results: Результаты детекции модели YOLO.
+        :param x_offset: Сдвиг по X для глобальных координат.
+        :param y_offset: Сдвиг по Y для глобальных координат.
+        :return: Список обнаруженных объектов.
         """
-        if detections:
-            detection = detections[0]  # Берем первую детекцию (наиболее уверенную)
-            x_center = int((detection['x1'] + detection['x2']) / 2)
-            y_center = int((detection['y1'] + detection['y2']) / 2)
+        detected_objects = []
+        for r in results:
+            detections = r.boxes
+            for det in detections:
+                xyxy = det.xyxy[0].cpu().numpy()
+                conf = det.conf.cpu().numpy()[0]
+                cls = int(det.cls.cpu().numpy()[0])
+                class_name = r.names[cls]
 
-            self.tracks.appendleft((x_center, y_center))
-            self.last_position = (x_center, y_center)
-            self.missed_frames = 0  # Сбрасываем счетчик пропущенных кадров
-        else:
-            self.missed_frames += 1
-
-    def process_full_frame(self, model, frame):
-        """
-        Выполняет глобальную детекцию на всем кадре.
-
-        :param model: YOLO модель для детекции объектов.
-        :param frame: Полный кадр для анализа.
-        :return: Обновленный кадр.
-        """
-        results = model.detect(frame)
-        detections = []
-
-        for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
-
-                detections.append({'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2, 'class': cls, 'conf': conf})
-
-        self.update_tracks(detections)
-        return self.visualize(frame, self.tracks)
-
-    def process_roi(self, model, frame):
-        """
-        Выполняет локальную детекцию на ROI (Region of Interest).
-
-        :param model: YOLO модель для детекции объектов.
-        :param frame: Полный кадр для анализа.
-        :return: Обновленный кадр.
-        """
-        if self.missed_frames > self.timeout:
-            print("Switching to full frame detection due to timeout.")
-            return self.process_full_frame(model, frame)
-
-        center_x, center_y = self.last_position
-        roi_x1 = max(0, int(center_x - self.roi_size // 2))
-        roi_x2 = min(frame.shape[1], int(center_x + self.roi_size // 2))
-        roi_y1 = max(0, int(center_y - self.roi_size // 2))
-        roi_y2 = min(frame.shape[0], int(center_y + self.roi_size // 2))
-
-        roi_frame = frame[roi_y1:roi_y2, roi_x1:roi_x2]
-
-        if roi_frame.size == 0:
-            print("Invalid ROI, switching to full frame detection.")
-            return self.process_full_frame(model, frame)
-
-        results = model.detect(roi_frame)
-        detections = []
-
-        for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
-                conf = float(box.conf[0])
-                cls = int(box.cls[0])
-
-                detections.append({'x1': x1 + roi_x1, 'y1': y1 + roi_y1,
-                                   'x2': x2 + roi_x1, 'y2': y2 + roi_y1,
-                                   'class': cls, 'conf': conf})
-
-        self.update_tracks(detections)
-        return self.visualize(frame, self.tracks)
-
-    def visualize(self, frame, tracks):
-        """
-        Визуализирует треки и область интереса на кадре.
-
-        :param frame: Кадр для визуализации.
-        :param tracks: Координаты треков.
-        :return: Кадр с наложенными визуализациями.
-        """
-        for i in range(1, len(tracks)):
-            if tracks[i - 1] is None or tracks[i] is None:
-                continue
-            cv2.line(frame, tracks[i - 1], tracks[i], (0, 255, 0), 2)
-
-        if self.missed_frames <= self.timeout:
-            center_x, center_y = self.last_position
-            roi_x1 = max(0, int(center_x - self.roi_size // 2))
-            roi_x2 = min(frame.shape[1], int(center_x + self.roi_size // 2))
-            roi_y1 = max(0, int(center_y - self.roi_size // 2))
-            roi_y2 = min(frame.shape[0], int(center_y + self.roi_size // 2))
-
-            cv2.rectangle(frame, (roi_x1, roi_y1), (roi_x2, roi_y2), (255, 0, 0), 2)
-
-        return frame
-
-    def draw_trajectory(self, frame):
-        for i in range(1, len(self.tracks)):
-            if self.tracks[i - 1] is None or self.tracks[i] is None:
-                continue
-            cv2.line(frame, self.tracks[i - 1], self.tracks[i], (0, 255, 0), 2)
+                if class_name.lower() in self.classes and conf >= 0.3:
+                    x1, y1, x2, y2 = xyxy
+                    detected_objects.append((class_name, conf, (x1 + x_offset, y1 + y_offset, x2 + x_offset, y2 + y_offset)))
+        return detected_objects
 
     def update_tracking_roi(self, detections):
         """
-        Обновляет область интереса (ROI) на основе новых детекций.
-
-        :param detections: Результаты детекции (список или массив с координатами боксов).
+        Обновляет текущий ROI для отслеживания объекта.
+        :param detections: Список обнаруженных объектов.
         """
-        # Проверяем, что detections не пустой
-        if detections is not None and len(detections) > 0:  # Для списков
-            # Берем первую детекцию как основную
-            detection = detections[0]
-            x1, y1, x2, y2 = detection['x1'], detection['y1'], detection['x2'], detection['y2']
-
-            # Обновляем последнюю позицию центра ROI
-            self.last_position = (
-                (x1 + x2) // 2,  # Центр по X
-                (y1 + y2) // 2  # Центр по Y
-            )
-            self.missed_frames = 0  # Сбрасываем счетчик пропущенных кадров
-
-        elif isinstance(detections, np.ndarray) and detections.size > 0:  # Для массивов NumPy
-            detection = detections[0]  # Берем первую детекцию
-            x1, y1, x2, y2 = detection[0], detection[1], detection[2], detection[3]
-
-            self.last_position = (
-                (x1 + x2) // 2,
-                (y1 + y2) // 2
-            )
-            self.missed_frames = 0
-
+        if detections:
+            self.lost_counter = 0
+            class_name, conf, (x1, y1, x2, y2) = detections[0]
+            center_x = int((x1 + x2) / 2)
+            center_y = int((y1 + y2) / 2)
+            self.tracking_roi = (center_x, center_y)
         else:
-            # Если детекций нет, увеличиваем счетчик пропущенных кадров
-            self.missed_frames += 1
+            self.lost_counter += 1
+            if self.lost_counter >= self.timeout:
+                self.tracking_roi = None
 
+    def process_full_frame(self, model, frame, height, width):
+        """
+        Выполняет поиск объекта на всем кадре.
+        :param model: YOLOModel для выполнения детекции.
+        :param frame: Кадр для обработки.
+        :param height: Высота кадра.
+        :param width: Ширина кадра.
+        :return: Обнаруженные объекты.
+        """
+        overlay = self.overlay
+        segments = [
+            (frame[0:height // 2 + overlay, 0:width // 2 + overlay], 0, 0),
+            (frame[0:height // 2 + overlay, width // 2 - overlay:width], 0, width // 2 - overlay),
+            (frame[height // 2 - overlay:height, 0:width // 2 + overlay], height // 2 - overlay, 0),
+            (frame[height // 2 - overlay:height, width // 2 - overlay:width], height // 2 - overlay,
+             width // 2 - overlay)
+        ]
 
+        detected_objects = []
+        for segment, y_offset, x_offset in segments:
+            results = model.detect(segment)
+            detected_objects.extend(self.process_detections(results, x_offset, y_offset))
 
+        return detected_objects
+
+    def process_roi(self, model, frame):
+        """
+        Обрабатывает кадр, ограниченный текущим ROI.
+        :param model: YOLOModel для выполнения детекции.
+        :param frame: Кадр для обработки.
+        :return: Кадр с обновленным ROI.
+        """
+        if self.tracking_roi:
+            center_x, center_y = self.tracking_roi
+            height, width = frame.shape[:2]
+            roi_x1 = max(0, center_x - (width // 4) - self.overlay)
+            roi_y1 = max(0, center_y - (height // 4) - self.overlay)
+            roi_x2 = min(width, center_x + (width // 4) + self.overlay)
+            roi_y2 = min(height, center_y + (height // 4) + self.overlay)
+
+            roi_frame = frame[roi_y1:roi_y2, roi_x1:roi_x2]
+            detections = self.process_detections(model.detect(roi_frame), roi_y1, roi_x1)
+
+            self.update_tracking_roi(detections)
+            return frame
+
+    def draw_trajectory(self, frame):
+        """
+        Отрисовывает траекторию объекта на кадре.
+        :param frame: Кадр для отрисовки.
+        """
+        for i in range(1, len(self.pts)):
+            if self.pts[i - 1] is not None and self.pts[i] is not None:
+                thickness = int(np.sqrt(len(self.pts) / float(i + 1)) * 2.5)
+                cv2.line(frame, self.pts[i - 1], self.pts[i], (0, 0, 255), thickness)
