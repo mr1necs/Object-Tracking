@@ -7,7 +7,7 @@ def get_arguments():
     :return: Словарь аргументов.
     """
     ap = ArgumentParser()
-    ap.add_argument("-d", "--device", type=str, default='cpu', help="device: 'mps', 'cuda' or 'cpu'")
+    ap.add_argument("-d", "--device", type=str, default='mps', help="device: 'mps', 'cuda' or 'cpu'")
     ap.add_argument("-c", "--camera", type=str, default=None, help="path to the optional video file")
     ap.add_argument("-b", "--buffer", type=int, default=64, help="maximum buffer size for trajectory")
     ap.add_argument("-t", "--timeout", type=int, default=30, help="number of frames before switching to full image search")
