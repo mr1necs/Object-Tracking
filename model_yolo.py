@@ -1,6 +1,7 @@
 from ultralytics import YOLO
 from torch.backends import mps
 from torch import cuda
+import logging
 
 
 class YOLOModel:
@@ -13,6 +14,8 @@ class YOLOModel:
         Инициализация модели YOLO.
         :param model_path: Путь к весам модели.
         """
+        # Установка уровня логирования
+        logging.getLogger("ultralytics").setLevel(logging.CRITICAL)
 
         self.model = YOLO(model_path)
         self.device = 'cpu'
