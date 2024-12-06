@@ -33,8 +33,8 @@ class MainApp:
             height, width = frame.shape[:2]
 
             # Если объект потерян, выполняем поиск на всем кадре
-            if self.tracker.tracking_roi is None or self.tracker.lost_counter >= self.tracker.timeout:
-                results = self.tracker.process_full_frame(self.model, frame, height, width)
+            if self.tracker.last_position is None or self.tracker.missed_frames >= self.tracker.timeout:
+                results = self.tracker.process_full_frame(self.model, frame)
                 self.tracker.update_tracking_roi(results)
             else:
                 # Если объект отслеживается, обрабатываем только ROI
