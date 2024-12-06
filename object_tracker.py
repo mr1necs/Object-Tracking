@@ -71,12 +71,19 @@ class ObjectTracker:
         """
         overlay = self.overlay
         segments = [
-            (model, frame[0:height//2 + overlay, 0:width//2 + overlay], 0, 0),
-            (model, frame[0:height//2 + overlay, width//2 - overlay:width], 0, width // 2 - overlay),
-            (model, frame[height//2 - overlay:height, 0:width//2 + overlay], height // 2 - overlay, 0),
-            (model, frame[height//2 - overlay:height, width//2 - overlay:width], height // 2 - overlay, width // 2 - overlay)
+            (frame[0:height // 2 + overlay, 0:width // 2 + overlay], 0, 0),
+            (frame[0:height // 2 + overlay, width // 2 - overlay:width], 0, width // 2 - overlay),
+            (frame[height // 2 - overlay:height, 0:width // 2 + overlay], height // 2 - overlay, 0),
+            (frame[height // 2 - overlay:height, width // 2 - overlay:width], height // 2 - overlay,
+             width // 2 - overlay)
         ]
-        return model.detect(segments)
+
+        detected_objects = []
+        for segment, y_offset, x_offset in segments:
+            results = model.detect(segment)
+            detected_objects.extend(self.process_detections(results, x_offset, y_offset))
+
+        return detected_objects
 
     def process_roi(self, model, frame):
         """
