@@ -26,7 +26,7 @@ project/
 ## Установка
 1. Клонируйте репозиторий:
    ```bash
-   git clone https://github.com/your-repo-url/project.git
+   git clone https://github.com/mr1necs/Object-Tracking.git
    cd project
    ```
 
